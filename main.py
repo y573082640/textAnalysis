@@ -5,10 +5,8 @@ import pandas as pd
 def run_pipeline(file_path):
     # 读取csv文件
     df = pd.read_excel(file_path)
-
     # 调用preprocess函数处理content列
     df['content_preprocessed'] = df['Content'].apply(preprocess)
-
     # 返回处理后的数据框
     print(df.head())
     return df

@@ -1,5 +1,38 @@
 import pandas as pd
 import re
+import jieba
+
+# 预定义jieba相关内容
+stopword_path="resources/stopwords.txt"
+jieba.load_userdict(stopword_path)  # 加载自定义词典
+tokenizer = jieba.Tokenizer()
+
+def remove_stopwords(text):
+    """
+    移除文本中的停用词
+
+    参数:
+        texts (list of str): 输入的文本列表
+        stopword_path: 停用词文件路径
+
+    返回:
+        list of str: 移除停用词后的文本列表
+    """
+    # 读入stopword_path文件
+    with open(stopword_path, 'r', encoding='utf-8') as file:
+        stopwords = file.read().splitlines()
+
+    processed_text = []
+    
+    # 使用jieba分词
+    words = tokenizer.lcut(text)
+    # 过滤停用词
+    filtered_words = [word for word in words if word not in stopwords]
+    # 将过滤后的单词组合成句子
+    processed_text = ''.join(filtered_words)
+
+    return processed_text
+
 def preprocess_with_glm(texts,prompt):
     prompt = """
         你是一个文本预处理专家，任务是对输入文本进行以下处理：
@@ -106,9 +139,12 @@ def preprocess(text):
     # 替换特殊字符
     cleaned_text = cleaned_text.replace("&nbsp;", " ")
 
+    # 加在一起
     cleaned_text = "\n".join([line for line in cleaned_text.splitlines() if line.strip()])
 
-    print(cleaned_text)
+    # 移除停用词
+    cleaned_text = remove_stopwords(cleaned_text)
+
     return cleaned_text
 
 
