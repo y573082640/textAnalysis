@@ -3,8 +3,13 @@ import re
 import jieba
 
 # 预定义jieba相关内容
+# 加载自定义词典
+zmjh_path="resources/zmjh.txt"
+with open(zmjh_path, 'r', encoding='utf-8') as file:
+    stopwords = file.read().splitlines()
+    for w in stopwords:
+        jieba.add_word(w)  
 stopword_path="resources/stopwords.txt"
-jieba.load_userdict(stopword_path)  # 加载自定义词典
 tokenizer = jieba.Tokenizer()
 
 def remove_stopwords(text):

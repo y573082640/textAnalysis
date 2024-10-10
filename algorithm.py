@@ -3,53 +3,142 @@ import jieba.analyse
 import jieba.posseg as pseg
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 from sklearn.cluster import KMeans
-from bertopic import BERTopic
 from sklearn.feature_extraction.text import TfidfVectorizer
-from umap import UMAP
-def word_count(texts, freq_threshold=10):
+import pandas as pd
+from collections import Counter
+from itertools import combinations
+
+def co_occurrence_analysis(texts, window_size=12, freq_threshold=2, output_file="output/co_occurrence_patterns.xlsx"):
     """
-    统计词频，筛选高频词
-    :param texts: 文本
-    :param freq_threshold: 高频词阈值
-    :return: 每一类词的高频词
+    共现分析，找到频繁共现的词语对，并将结果保存到 Excel 文件中
+    :param texts: 文本列表
+    :param window_size: 窗口大小，表示在同一窗口内出现的词语对会被认为共现
+    :param freq_threshold: 共现频率阈值，筛选频繁共现词对
+    :param output_file: 输出的 Excel 文件名
     """
-    # 分别存储动词、名词、形容词的词频
-    verb_freq = {}
-    noun_freq = {}
-    adj_freq = {}
+    # 存储所有共现词对的频次
+    co_occurrence_freq = Counter()
+
+    for text in texts:
+        words = [word for word, flag in pseg.cut(text)]  # 对文本进行分词
+        # 滑动窗口获取共现词对
+        for i in range(len(words) - window_size + 1):
+            window_words = words[i:i + window_size]
+            word_pairs = combinations(window_words, 2)
+            co_occurrence_freq.update(word_pairs)
+
+    # 筛选出频繁共现的词对
+    frequent_pairs = {pair: count for pair, count in co_occurrence_freq.items() if count >= freq_threshold}
+
+    # 将结果转为 DataFrame
+    word1_list = []
+    word2_list = []
+    counts = []
+    for (word1, word2), count in frequent_pairs.items():
+        word1_list.append(word1)
+        word2_list.append(word2)
+        counts.append(count)
+
+    df = pd.DataFrame({
+        'Word 1': word1_list,
+        'Word 2': word2_list,
+        'Co-occurrence Frequency': counts
+    })
+
+    # 保存到 Excel 文件
+    df.to_excel(output_file, index=False)
+    print(f"共现分析结果已保存到 {output_file}")
+
+    return df
+
+def word_count(texts, freq_threshold=5, output_file="output/word_frequencies.xlsx"):
+    """
+    统计所有词的词频，并将结果保存到 Excel 文件中
+    :param texts: 文本列表
+    :param freq_threshold: 高频词阈值，默认为1，统计所有词
+    :param output_file: 输出的 Excel 文件名
+    """
+    pos_mapping = {
+        'a': '形容词',
+        'ad': '副形词',
+        'an': '名形词',
+        'b': '区别词',
+        'c': '连词',
+        'd': '副词',
+        'e': '叹词',
+        'f': '方位词',
+        'g': '语素',
+        'h': '前接成分',
+        'i': '成语',
+        'j': '简称略语',
+        'k': '后接成分',
+        'l': '习用语',
+        'm': '数词',
+        'mq': '数量词',
+        'n': '名词',
+        'nr': '人名',
+        'nrfg': '古代人名',
+        'nrt': '音译人名',
+        'ns': '地名',
+        'nt': '机构团体',
+        'nz': '其他专名',
+        'o': '拟声词',
+        'p': '介词',
+        'q': '量词',
+        'r': '代词',
+        'rz': '指示代词',
+        's': '处所词',
+        't': '时间词',
+        'tg': '时间语素',
+        'u': '助词',
+        'ud': '结构助词',
+        'ug': '时态助词',
+        'uz': '着词助词',
+        'uv': '连词助词',
+        'v': '动词',
+        'vd': '副动词',
+        'vn': '名动词',
+        'vg': '动词语素',
+        'w': '标点符号',
+        'x': '非语素字',
+        'y': '语气词',
+        'z': '状态词',
+        'zg': '状态语素',
+        'eng': '外来语'
+    }
+    # 存储所有词的词频
+    word_freq = {}
 
     for text in texts:
         words = pseg.cut(text)
         for word, flag in words:
-            if flag.startswith('v'):  # 动词
-                if word not in verb_freq:
-                    verb_freq[word] = 0
-                verb_freq[word] += 1
-            elif flag.startswith('n'):  # 名词
-                if word not in noun_freq:
-                    noun_freq[word] = 0
-                noun_freq[word] += 1
-            elif flag.startswith('a'):  # 形容词
-                if word not in adj_freq:
-                    adj_freq[word] = 0
-                adj_freq[word] += 1
+            if (word, flag) not in word_freq:
+                word_freq[(word, flag)] = 0
+            word_freq[(word, flag)] += 1
 
-    # 对每类词按照词频排序
-    sorted_verbs = sorted(verb_freq.items(), key=lambda x: x[1], reverse=True)
-    sorted_nouns = sorted(noun_freq.items(), key=lambda x: x[1], reverse=True)
-    sorted_adjs = sorted(adj_freq.items(), key=lambda x: x[1], reverse=True)
+    # 词频结果转为 DataFrame
+    all_words = []
+    all_flags = []
+    all_counts = []
 
-    # 筛选出高频词
-    high_freq_verbs = [word for word, count in sorted_verbs if count >= freq_threshold]
-    high_freq_nouns = [word for word, count in sorted_nouns if count >= freq_threshold]
-    high_freq_adjs = [word for word, count in sorted_adjs if count >= freq_threshold]
+    for (word, flag), count in word_freq.items():
+        if count >= freq_threshold:
+            all_words.append(word)
+            all_flags.append(pos_mapping.get(flag,flag))
+            all_counts.append(count)
 
-    return {
-        'verbs': (sorted_verbs, high_freq_verbs),
-        'nouns': (sorted_nouns, high_freq_nouns),
-        'adjectives': (sorted_adjs, high_freq_adjs)
-    }
+    # 创建 DataFrame
+    df = pd.DataFrame({
+        '词语': all_words,
+        '词性': all_flags,
+        '词频': all_counts
+    })
 
+    # 将结果保存为 Excel 文件
+    df.to_excel(output_file, index=False)
+    print(f"词频结果已保存到 {output_file}")
+
+    return df
 
 def keyword_extraction(texts, top_k=5):
     """
